@@ -4,8 +4,9 @@
 # First download the model:  hf download 0xSero/GLM-5.2-REAP-NU176-526B --local-dir $MODEL_DIR
 services:
   glm52-nu176:
-    build: .
-    image: local/vllm-b12x-nonuniform:latest
+    # prebuilt fork image (public); comment `image:` and uncomment `build:` to build locally
+    image: ghcr.io/0xsero/vllm-b12x-nonuniform:20260705
+    # build: .
     container_name: ${NAME:-glm52-nu176}
     restart: unless-stopped
     logging:

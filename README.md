@@ -15,6 +15,10 @@ git clone https://github.com/0xSero/glm-5.2-nonuniform && cd glm-5.2-nonuniform
 
 OpenAI-compatible API on `:8000` (`served-model-name: glm-5.2-nu176`).
 
+Prebuilt fork image: `ghcr.io/0xsero/vllm-b12x-nonuniform:20260705` (compose uses it by
+default; `docker compose build` rebuilds locally from the patch). Also mirrored as a
+docker tar in the HF repo under `docker/` (`zstd -d | docker load`).
+
 ## Why a fork
 
 Every MoE serving stack assumes one expert count for all layers. Non-uniform pruning is
