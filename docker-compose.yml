@@ -1,0 +1,78 @@
+# GLM-5.2-REAP-NU176-526B (non-uniform expert prune) on 4x RTX PRO 6000 Blackwell (SM120).
+# Builds the vLLM fork (12-line deepseek_v2.py patch) on top of the voipmonitor b12x image.
+#   MODEL_DIR=/mnt/llm_models/GLM-5.2-REAP-NU176 docker compose up -d
+# First download the model:  hf download 0xSero/GLM-5.2-REAP-NU176-526B --local-dir $MODEL_DIR
+services:
+  glm52-nu176:
+    build: .
+    image: local/vllm-b12x-nonuniform:latest
+    container_name: ${NAME:-glm52-nu176}
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "100m", max-file: "5" }
+    network_mode: host
+    ipc: host
+    shm_size: "32gb"
+    ulimits: { memlock: -1, stack: 67108864 }
+    volumes:
+      - ${MODEL_DIR:-/mnt/llm_models/GLM-5.2-REAP-NU176}:/model:ro
+      - nu176-jit:/cache/jit
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    environment:
+      CUDA_DEVICE_ORDER: PCI_BUS_ID
+      CUDA_VISIBLE_DEVICES: "0,1,2,3"
+      OMP_NUM_THREADS: "16"
+      CUTE_DSL_ARCH: sm_120a
+      CUDA_DEVICE_MAX_CONNECTIONS: "32"
+      NCCL_P2P_LEVEL: SYS
+      NCCL_P2P_DISABLE: "1"          # Blackwell PCIe P2P deadlock fix
+      NCCL_SHM_DISABLE: "0"
+      NCCL_PROTO: "LL,LL128,Simple"
+      NCCL_IB_DISABLE: "1"
+      USE_NCCL_XML: "0"
+      NCCL_GRAPH_FILE: /dev/null
+      PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+      SAFETENSORS_FAST_GPU: "1"
+      VLLM_WORKER_MULTIPROC_METHOD: spawn
+      VLLM_USE_B12X_SPARSE_INDEXER: "1"   # REQUIRED: without it the MTP drafter
+      VLLM_USE_B12X_MOE: "1"              # falls back to FlashInferMLASparse -> DCP assert
+      VLLM_USE_V2_MODEL_RUNNER: "1"
+      VLLM_USE_FLASHINFER_SAMPLER: "1"
+      VLLM_USE_B12X_FP8_GEMM: "1"
+      VLLM_ENABLE_PCIE_ALLREDUCE: "0"
+      VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS: "0"
+      VLLM_DISABLED_KERNELS: MarlinFP8ScaledMMLinearKernel
+      USES_B12X: "True"
+      B12X_DENSE_SPLITK_TURBO: "1"
+      B12X_W4A16_TC_DECODE: "1"
+      B12X_MOE_FORCE_A16: "1"
+      XDG_CACHE_HOME: /cache/jit
+      VLLM_CACHE_DIR: /cache/jit/vllm
+    entrypoint: ["/bin/bash", "-lc"]
+    command:
+      - >
+        exec /opt/venv/bin/vllm serve /model
+        --served-model-name ${SERVED_MODEL_NAME:-glm-5.2-nu176}
+        --trust-remote-code --host 0.0.0.0 --port ${PORT:-8000}
+        --tensor-parallel-size 4 --pipeline-parallel-size 1
+        --decode-context-parallel-size 4 --dcp-comm-backend ag_rs --dcp-kv-cache-interleave-size 1
+        --max-model-len ${MAX_MODEL_LEN:-262144} --max-num-seqs ${MAX_NUM_SEQS:-2}
+        --gpu-memory-utilization ${GPU_MEMORY_UTILIZATION:-0.95}
+        --kv-cache-dtype fp8 --quantization modelopt_fp4 --dtype bfloat16
+        --attention-backend B12X_MLA_SPARSE --moe-backend b12x --async-scheduling
+        --enable-chunked-prefill --enable-prefix-caching --load-format fastsafetensors
+        --max-num-batched-tokens 8192
+        --tool-call-parser glm47 --enable-auto-tool-choice --reasoning-parser glm45
+        --hf-overrides '{"index_topk_pattern":"FFFSSSFSSSFSSSFSSSFSSSFSSSFSSSFSSSFSSSFSSSFSSSFSSSFSSSFSSSFSSSFSSSFSSSFSSSFSSS","use_index_cache":true}'
+        --speculative-config '{"method":"mtp","num_speculative_tokens":4,"moe_backend":"b12x","draft_sample_method":"probabilistic"}'
+        --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}'
+
+volumes:
+  nu176-jit:
