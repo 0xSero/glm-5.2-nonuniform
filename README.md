@@ -64,6 +64,22 @@ Same pattern as vLLM's NemotronH heterogeneous-MoE support. GLM-5.2 has
 - `NCCL_P2P_DISABLE=1` on Blackwell PCIe boxes (allreduce deadlock).
 - The `index_topk_pattern` hf-override (79-char F/S map) is required for long-context
   coherence — vLLM ignores `config.indexer_types`.
+- **Indexer precision matters as much as indexer configuration.** Independent mixed-precision
+  testing (MLX/Apple Silicon) found that quantizing the DSA lightning indexer weights below
+  BF16 corrupts long-range attention routing — same symptom as a missing F/S pattern, but
+  gradual at depth rather than immediate garbage. Three-quant comparison:
+
+  | Quant variant | Indexer precision | Collapse point |
+  |---|---|---|
+  | 8-bit uniform | 8-bit | ~4,700 tokens → degraded output |
+  | DQ4plus (8-bit indexer) | 8-bit | ~3,000–3,700 tokens → degraded output |
+  | BF16 indexer + 4-bit experts | **BF16** | 5,846+ tokens clean — natural stop |
+
+  Routed MoE experts compress to 4-bit with no loss; the indexer, MLA attention,
+  embeddings, router gate, and lm_head do not. Your NVFP4 checkpoint keeps these components
+  at higher precision, which likely explains why your long-context tests hold. Anyone building
+  custom quants should treat indexer precision as load-bearing for deep context coherence.
+  Recipe and proof: https://github.com/chadhurley25075-web/GLM-5.2-indexer-BF16-MLX
 - FP8 KV (`fp8_ds_mla`) is required on SM120; BF16 KV produces garbage.
 - First boot JIT-compiles B12X kernels for ~30 distinct expert-count shapes: 30–40 min.
   The JIT cache persists in the `nu176-jit` volume; warm boots take ~5 min.
