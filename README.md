@@ -68,13 +68,16 @@ Same pattern as vLLM's NemotronH heterogeneous-MoE support. GLM-5.2 has
 - First boot JIT-compiles B12X kernels for ~30 distinct expert-count shapes: 30–40 min.
   The JIT cache persists in the `nu176-jit` volume; warm boots take ~5 min.
 
-## Anti-overthinking (arXiv:2606.00206)
+## Anti-overthinking (arXiv:2606.00206) — ON by default
 
 Quantized/pruned reasoning models reach the right answer mid-CoT, then hedge
-("wait", "alternatively", …) without improving accuracy. The paper's fix is a logit
-penalty on hesitation markers; vLLM rejects `logit_bias` under speculative decoding, so
-apply it as a system directive (or run without MTP and use `logit_bias`). See
-`overthinking_penalty_proxy.py` in this repo for a transparent sidecar implementation.
+("wait", "alternatively", …) without improving accuracy. This repo applies the paper's
+actual fix — a **logit penalty on hesitation-marker tokens** — via a launch-time vLLM
+logits processor (`overthink_logits_processor.py`, baked into the image and enabled with
+`--logits-processors`). Works under MTP speculative decoding, unlike per-request
+`logit_bias`. Tune or disable with `OVERTHINK_PENALTY` (default 2.0, `0` = off) and
+`OVERTHINK_MARKERS`. `overthinking_penalty_proxy.py` is the prompt-level sidecar variant
+for engines you can't relaunch.
 
 ## Files
 

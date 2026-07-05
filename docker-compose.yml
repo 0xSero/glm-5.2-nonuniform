@@ -54,6 +54,7 @@ services:
       B12X_DENSE_SPLITK_TURBO: "1"
       B12X_W4A16_TC_DECODE: "1"
       B12X_MOE_FORCE_A16: "1"
+      OVERTHINK_PENALTY: "${OVERTHINK_PENALTY:-2.0}"   # arXiv:2606.00206; 0 disables
       XDG_CACHE_HOME: /cache/jit
       VLLM_CACHE_DIR: /cache/jit/vllm
     entrypoint: ["/bin/bash", "-lc"]
@@ -73,6 +74,7 @@ services:
         --tool-call-parser glm47 --enable-auto-tool-choice --reasoning-parser glm45
         --hf-overrides '{"index_topk_pattern":"FFFSSSFSSSFSSSFSSSFSSSFSSSFSSSFSSSFSSSFSSSFSSSFSSSFSSSFSSSFSSSFSSSFSSSFSSSFSSS","use_index_cache":true}'
         --speculative-config '{"method":"mtp","num_speculative_tokens":4,"moe_backend":"b12x","draft_sample_method":"probabilistic"}'
+        --logits-processors overthink_logits_processor.OverthinkPenalty
         --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}'
 
 volumes:
